@@ -47,5 +47,4 @@ class ColumnCastCheckerTest extends TestCase
         $this->assertContains('fillable', $kinds);
         $this->assertGreaterThanOrEqual(2, \count($report->issues));
     }
-
 }
