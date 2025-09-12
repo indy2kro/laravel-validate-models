@@ -30,6 +30,9 @@ class ColumnCastCheckerTest extends TestCase
             protected $table    = 'widgets';
             protected $fillable = ['name', 'missing_field']; // 'missing_field' doesn't exist
 
+            /**
+             * @return array<string, string>
+             */
             protected function casts(): array
             {
                 return ['name' => 'integer']; // wrong cast on purpose

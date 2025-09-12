@@ -29,6 +29,9 @@ class ModelValidatorServiceTest extends TestCase
             protected $table    = 'things';
             protected $fillable = ['name'];
 
+            /**
+             * @return array<string, string>
+             */
             protected function casts(): array
             {
                 return ['name' => 'string'];

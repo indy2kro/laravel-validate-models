@@ -8,6 +8,7 @@ use BackedEnum;
 use Illuminate\Contracts\Database\Eloquent\CastsAttributes;
 use Illuminate\Contracts\Database\Eloquent\CastsInboundAttributes;
 use ReflectionEnum;
+use ReflectionNamedType;
 
 class TypeMatcher
 {
@@ -21,7 +22,6 @@ class TypeMatcher
         protected array $map,
         string $driver = '*'
     ) {
-        // Keep only the *key*; fall back to '*'
         $this->driver = \array_key_exists($driver, $this->map) ? $driver : '*';
     }
 
@@ -34,17 +34,24 @@ class TypeMatcher
         // 1) PHP 8.1+ enums
         if (\function_exists('enum_exists') && enum_exists($cast)) {
             if (is_subclass_of($cast, BackedEnum::class)) {
-                $ref     = new ReflectionEnum($cast);
-                $backing = $ref->getBackingType()?->getName(); // 'int'|'string'
+                $ref = new ReflectionEnum($cast);
 
-                return $backing === 'int'
-                    ? \in_array($dbType, ['int','integer','bigint','tinyint','smallint'], true)
-                    : ($backing === 'string'
-                        ? \in_array($dbType, ['string','varchar','char','text','enum','set'], true)
-                        : true);
+                // SAFER: only call getName() if it's a ReflectionNamedType
+                $backingType = $ref->getBackingType(); // ?ReflectionNamedType
+                $backing     = $backingType instanceof ReflectionNamedType ? $backingType->getName() : null;
+
+                if ($backing === 'int' || $backing === 'integer') {
+                    return \in_array($dbType, ['int','integer','bigint','tinyint','smallint'], true);
+                }
+                if ($backing === 'string') {
+                    return \in_array($dbType, ['string','varchar','char','text','enum','set'], true);
+                }
+
+                // If we can’t determine (unexpected type), be permissive to avoid false positives
+                return true;
             }
 
-            // Unit enums: assume custom cast handles storage
+            // Unit (pure) enums: assume handled via custom cast/storage
             return true;
         }
 
