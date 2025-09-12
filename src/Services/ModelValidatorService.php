@@ -16,7 +16,8 @@ final class ModelValidatorService implements ModelValidator
     public function __construct(
         private readonly ColumnCastChecker $columns,
         private readonly RelationChecker   $relations,
-        private readonly array $checks = ['columns' => true, 'casts' => true, 'fillable' => true, 'relations' => true]
+        private readonly ?AnnotationChecker $annotations = null,
+        private readonly array $checks = ['columns' => true, 'casts' => true, 'fillable' => true, 'relations' => true, 'annotations' => true],
     ) {
     }
 
@@ -29,6 +30,9 @@ final class ModelValidatorService implements ModelValidator
         }
         if ($this->checks['relations']) {
             $report = $this->merge($report, $this->relations->check($model));
+        }
+        if (($this->checks['annotations'] ?? false) && $this->annotations) {
+            $report = $this->merge($report, $this->annotations->check($model));
         }
 
         return $report;

@@ -10,9 +10,11 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Indy2kro\ValidateModels\Contracts\ModelLocator;
 use Indy2kro\ValidateModels\Contracts\ModelValidator;
+use Indy2kro\ValidateModels\Services\AnnotationChecker;
 use Indy2kro\ValidateModels\Services\ColumnCastChecker;
 use Indy2kro\ValidateModels\Services\ModelValidatorService;
 use Indy2kro\ValidateModels\Services\RelationChecker;
+use Indy2kro\ValidateModels\Support\DocblockPropertyParser;
 use Indy2kro\ValidateModels\Support\TypeMatcher;
 
 final class ValidateModelsCommand extends Command
@@ -97,11 +99,21 @@ final class ValidateModelsCommand extends Command
 
         $relations = new RelationChecker($ignore['relations'] ?? []);
 
-        return new ModelValidatorService($columns, $relations, [
-            'columns'   => $checks['columns'],
-            'casts'     => $checks['casts'],
-            'fillable'  => $checks['fillable'],
-            'relations' => $checks['relations'],
+        $annCfg            = config('validate-models.annotations', []);
+        $annotationChecker = new AnnotationChecker(
+            $matcher,
+            new DocblockPropertyParser(),
+            (bool)($annCfg['columns_only'] ?? true),
+            (bool)($annCfg['check_casts'] ?? true),
+            (array)($annCfg['ignore'] ?? [])
+        );
+
+        return new ModelValidatorService($columns, $relations, $annotationChecker, [
+            'columns'     => $checks['columns'],
+            'casts'       => $checks['casts'],
+            'fillable'    => $checks['fillable'],
+            'relations'   => $checks['relations'],
+            'annotations' => (bool)config('validate-models.checks.annotations', true),
         ]);
     }
 }

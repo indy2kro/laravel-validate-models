@@ -10,6 +10,14 @@ return [
         'casts'     => true,
         'fillable'  => true,
         'relations' => true,
+        'annotations'=> true,
+    ],
+
+    'annotations' => [
+        'columns_only' => true, // only check @property names that exist as columns
+        'check_casts'  => true, // also compare annotation types vs model casts
+        'ignore'       => [     // names to ignore
+        ],
     ],
 
     'ignore' => [
