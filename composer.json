@@ -1,0 +1,75 @@
+{
+  "name": "indy2kro/laravel-validate-models",
+  "description": "Validate Eloquent models against the database schema (columns, casts, fillables, relations).",
+  "type": "library",
+  "license": "MIT",
+  "keywords": [
+    "laravel",
+    "eloquent",
+    "validation",
+    "models",
+    "schema",
+    "casts",
+    "relations"
+  ],
+  "authors": [
+    {
+      "name": "Cristian Radu",
+      "email": "indy2kro@gmail.com"
+    }
+  ],
+  "require": {
+    "php": "^8.1",
+    "illuminate/support": "^10.0|^11.0|^12.0",
+    "illuminate/database": "^10.0|^11.0|^12.0",
+    "illuminate/console": "^10.0|^11.0|^12.0",
+    "illuminate/filesystem": "^10.0|^11.0|^12.0"
+  },
+  "require-dev": {
+    "orchestra/testbench": "^8.0|^9.0",
+    "phpunit/phpunit": "^10.0",
+    "phpstan/phpstan": "^1.11",
+    "rector/rector": "^1.2",
+    "friendsofphp/php-cs-fixer": "^3.64"
+  },
+  "autoload": {
+    "psr-4": {
+      "Indy2kro\\ValidateModels\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Indy2kro\\ValidateModels\\Tests\\": "tests/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Indy2kro\\ValidateModels\\ValidateModelsServiceProvider"
+      ]
+    }
+  },
+  "scripts": {
+    "test": "phpunit",
+    "test:coverage": "XDEBUG_MODE=coverage phpunit --coverage-clover build/coverage/clover.xml",
+    "cs": "php-cs-fixer fix --config=.php-cs-fixer.php --allow-risky=yes --dry-run --diff",
+    "cs:fix": "php-cs-fixer fix --config=.php-cs-fixer.php --allow-risky=yes",
+    "stan": "phpstan analyse --ansi",
+    "rector": "rector process --dry-run",
+    "rector:fix": "rector process",
+    "ci": [
+      "@cs",
+      "@stan",
+      "@rector",
+      "@test"
+    ]
+  },
+  "config": {
+    "sort-packages": true,
+    "allow-plugins": {
+      "phpstan/extension-installer": true
+    }
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true
+}
