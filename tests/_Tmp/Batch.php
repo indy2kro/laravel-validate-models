@@ -21,6 +21,9 @@ class Batch extends Model
 {
     protected $table = 'batches';
 
+    /**
+     * @return array<string, string>
+     */
     protected function casts(): array
     {
         return [
