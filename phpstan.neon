@@ -1,0 +1,8 @@
+parameters:
+  level: 7
+  paths:
+    - src
+    - tests
+  tmpDir: build/phpstan
+includes:
+  - vendor/larastan/larastan/extension.neon
