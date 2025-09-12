@@ -29,14 +29,7 @@ class ColumnCastCheckerTest extends TestCase
         $model = new class () extends Model {
             protected $table    = 'widgets';
             protected $fillable = ['name', 'missing_field']; // 'missing_field' doesn't exist
-
-            /**
-             * @return array<string, string>
-             */
-            protected function casts(): array
-            {
-                return ['name' => 'integer']; // wrong cast on purpose
-            }
+            protected $casts    = ['name' => 'integer'];      // wrong cast on purpose
         };
 
         $matcher = new TypeMatcher([
@@ -54,4 +47,5 @@ class ColumnCastCheckerTest extends TestCase
         $this->assertContains('fillable', $kinds);
         $this->assertGreaterThanOrEqual(2, \count($report->issues));
     }
+
 }
