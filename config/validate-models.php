@@ -18,6 +18,8 @@ return [
         'check_casts'  => true, // also compare annotation types vs model casts
         'ignore'       => [     // names to ignore
         ],
+        'aliases'      => [     // map short names used in @property tags to FQCNs 
+        ],
     ],
 
     'ignore' => [

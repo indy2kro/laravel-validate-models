@@ -105,7 +105,8 @@ final class ValidateModelsCommand extends Command
             new DocblockPropertyParser(),
             (bool)($annCfg['columns_only'] ?? true),
             (bool)($annCfg['check_casts'] ?? true),
-            (array)($annCfg['ignore'] ?? [])
+            (array)($annCfg['ignore'] ?? []),
+            (array)($annCfg['aliases'] ?? [])
         );
 
         return new ModelValidatorService($columns, $relations, $annotationChecker, [
