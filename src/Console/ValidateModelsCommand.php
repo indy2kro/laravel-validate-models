@@ -106,7 +106,8 @@ final class ValidateModelsCommand extends Command
             (bool)($annCfg['columns_only'] ?? true),
             (bool)($annCfg['check_casts'] ?? true),
             (array)($annCfg['ignore'] ?? []),
-            (array)($annCfg['aliases'] ?? [])
+            (array)($annCfg['aliases'] ?? []),
+            (bool)($annCfg['check_nullability'] ?? true)
         );
 
         return new ModelValidatorService($columns, $relations, $annotationChecker, [

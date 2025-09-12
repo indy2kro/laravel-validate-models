@@ -18,6 +18,9 @@
       "email": "indy2kro@gmail.com"
     }
   ],
+  "suggest": {
+    "doctrine/dbal": "Enable robust, cross-driver nullability checks for annotations"
+  },
   "require": {
     "php": "^8.1",
     "illuminate/support": "^10.0|^11.0|^12.0",

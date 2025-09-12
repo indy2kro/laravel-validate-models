@@ -12,18 +12,15 @@ use Illuminate\Database\Eloquent\Model;
  * @property int     $year
  * @property int     $month
  * @property int     $ordinal
- * @property Carbon  $created_at
- * @property Carbon  $updated_at
- * @property string  $status
- * @property ?string $error_message
+ * @property ?Carbon $created_at    // nullable in schema
+ * @property ?Carbon $updated_at    // nullable in schema
+ * @property ?string $status        // nullable in schema
+ * @property ?string $error_message // nullable in schema
  */
 class Batch extends Model
 {
     protected $table = 'batches';
 
-    /**
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
@@ -32,7 +29,7 @@ class Batch extends Model
             'ordinal'    => 'integer',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
-            // 'status' intentionally lacks a cast for the test
+            // no cast for status on purpose
         ];
     }
 }
