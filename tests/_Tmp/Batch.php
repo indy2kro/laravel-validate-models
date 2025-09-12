@@ -8,14 +8,14 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * @property int            $id
- * @property int            $year
- * @property int            $month
- * @property int            $ordinal
- * @property Carbon $created_at
- * @property Carbon $updated_at
- * @property string         $status
- * @property ?string        $error_message
+ * @property int     $id
+ * @property int     $year
+ * @property int     $month
+ * @property int     $ordinal
+ * @property Carbon  $created_at
+ * @property Carbon  $updated_at
+ * @property string  $status
+ * @property ?string $error_message
  */
 class Batch extends Model
 {
