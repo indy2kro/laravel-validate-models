@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Indy2kro\ValidateModels\Tests;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Schema;
 use Indy2kro\ValidateModels\Services\AnnotationChecker;
 use Indy2kro\ValidateModels\Support\DocblockPropertyParser;
