@@ -32,7 +32,6 @@ class AnnotationCheckerTest extends TestCase
 
     public function test_docblock_properties_are_checked_against_db_and_casts(): void
     {
-        /** @var Model $model */
         $model = new Batch();
 
         $matcher = new TypeMatcher([
