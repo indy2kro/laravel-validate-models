@@ -22,20 +22,20 @@
     "doctrine/dbal": "Enable robust, cross-driver nullability checks for annotations"
   },
   "require": {
-    "php": "^8.1",
+    "php": "^8.3",
     "illuminate/support": "^10.0|^11.0|^12.0",
     "illuminate/database": "^10.0|^11.0|^12.0",
     "illuminate/console": "^10.0|^11.0|^12.0",
     "illuminate/filesystem": "^10.0|^11.0|^12.0"
   },
   "require-dev": {
-    "driftingly/rector-laravel": "^1.2",
-    "friendsofphp/php-cs-fixer": "^3.64",
-    "larastan/larastan": "^2.11",
-    "orchestra/testbench": "^8.0|^9.0",
-    "phpstan/phpstan": "^1.11",
-    "phpunit/phpunit": "^10.0",
-    "rector/rector": "^1.2"
+    "driftingly/rector-laravel": "^1.2|^2",
+    "friendsofphp/php-cs-fixer": "^3",
+    "larastan/larastan": "^2|^3",
+    "orchestra/testbench": "^8.0|^9.0|^10.0",
+    "phpstan/phpstan": "^1|^2",
+    "phpunit/phpunit": "^10|^11|^12",
+    "rector/rector": "^1|^2"
   },
   "autoload": {
     "psr-4": {
@@ -73,6 +73,9 @@
     "sort-packages": true,
     "allow-plugins": {
       "phpstan/extension-installer": true
+    },
+    "platform": {
+      "php": "8.3.0"
     }
   },
   "minimum-stability": "stable",
