@@ -9,7 +9,7 @@ namespace Indy2kro\ValidateModels\Support;
  *
  * Produces:
  *  - name: string (without $)
- *  - types: list<string> (normalized without leading '?', without 'null')
+ *  - types: list<string> (union members without leading '?' and without 'null'; generics are kept, e.g. "array<string, int>")
  *  - nullable: bool (true if '?' or 'null' present)
  *  - raw: original type string
  *
@@ -18,11 +18,11 @@ namespace Indy2kro\ValidateModels\Support;
 final class DocblockPropertyParser
 {
     /**
-     * @return array<string, array{name:string, types: string[], nullable: bool, raw: string}>
+     * @return array<string, array{name: string, types: list<string>, nullable: bool, raw: string}>
      */
     public function parse(?string $docblock): array
     {
-        if (!$docblock) {
+        if ($docblock === null || $docblock === '') {
             return [];
         }
 
@@ -32,17 +32,23 @@ final class DocblockPropertyParser
         foreach ($lines as $line) {
             $line = trim($line, " \t\n\r\0\x0B*");
 
-            if (!preg_match('/^@property(?:-read|-write)?\s+([^\s]+)\s+\$([A-Za-z_]\w*)/iu', $line, $m)) {
+            if (!preg_match('/^@property(?:-read|-write)?\s+(\S.*)$/iu', $line, $m)) {
                 continue;
             }
 
-            $typeString = $m[1];
-            $name       = $m[2];
-            $nullable   = false;
-            $types      = [];
+            $typeString = $this->readType($m[1]);
+            $rest       = substr($m[1], \strlen($typeString));
 
-            foreach (explode('|', $typeString) as $t) {
-                $t = ltrim($t, '\\');
+            if ($typeString === '' || !preg_match('/^\s+\$([A-Za-z_]\w*)/', $rest, $n)) {
+                continue;
+            }
+
+            $name     = $n[1];
+            $nullable = false;
+            $types    = [];
+
+            foreach ($this->splitUnion($typeString) as $t) {
+                $t = ltrim(trim($t), '\\');
                 if ($t === '') {
                     continue;
                 }
@@ -67,5 +73,53 @@ final class DocblockPropertyParser
         }
 
         return $out;
+    }
+
+    /** The leading type expression: everything up to the first whitespace outside brackets. */
+    private function readType(string $text): string
+    {
+        $depth = 0;
+        $len   = \strlen($text);
+
+        for ($i = 0; $i < $len; $i++) {
+            $c = $text[$i];
+
+            if ($c === '<' || $c === '(' || $c === '{' || $c === '[') {
+                $depth++;
+            } elseif ($c === '>' || $c === ')' || $c === '}' || $c === ']') {
+                $depth = max(0, $depth - 1);
+            } elseif ($depth === 0 && ($c === ' ' || $c === "\t")) {
+                return substr($text, 0, $i);
+            }
+        }
+
+        return $text;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function splitUnion(string $type): array
+    {
+        $parts = [];
+        $depth = 0;
+        $start = 0;
+        $len   = \strlen($type);
+
+        for ($i = 0; $i < $len; $i++) {
+            $c = $type[$i];
+
+            if ($c === '<' || $c === '(' || $c === '{' || $c === '[') {
+                $depth++;
+            } elseif ($c === '>' || $c === ')' || $c === '}' || $c === ']') {
+                $depth = max(0, $depth - 1);
+            } elseif ($c === '|' && $depth === 0) {
+                $parts[] = substr($type, $start, $i - $start);
+                $start   = $i + 1;
+            }
+        }
+        $parts[] = substr($type, $start);
+
+        return $parts;
     }
 }

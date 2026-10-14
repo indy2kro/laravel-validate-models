@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Indy2kro\ValidateModels\Tests;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Indy2kro\ValidateModels\Services\ColumnCastChecker;
 use Indy2kro\ValidateModels\Services\ModelValidatorService;
@@ -17,7 +18,7 @@ class ModelValidatorServiceTest extends TestCase
     {
         parent::setUp();
 
-        Schema::create('things', function ($t) {
+        Schema::create('things', function (Blueprint $t) {
             $t->increments('id');
             $t->string('name');
         });

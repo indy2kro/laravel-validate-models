@@ -35,7 +35,7 @@ security. Continue only when the user says to.
 | Lens | Looks for |
 |---|---|
 | `bug` | Wrong results: false positives or negatives in column, cast, fillable, relation and `@property` checks; casts defined via `casts()` method versus `$casts` property; enum and custom cast classes; nullable and default handling; drivers other than SQLite (MySQL, PostgreSQL) |
-| `compat` | Laravel 10/11/12 and PHP 8.3–8.5 differences, optional `doctrine/dbal` path versus the native schema builder, constraints in `composer.json` that do not match what CI tests |
+| `compat` | Laravel 12/13 and PHP 8.3–8.5 differences, `Schema::getColumns()` type names per driver, constraints in `composer.json` that do not match what CI tests |
 | `sec` | Model discovery loading arbitrary files or classes (`FilesystemModelLocator`), path handling, anything that executes or `include`s user-controlled paths |
 | `feature` | Checks worth adding: unique/index awareness, morph relations, soft deletes, `$hidden`/`$appends`, JSON output formats for CI, exit codes and baseline files |
 | `ux` | Console command options and output clarity, error messages, config publishing, service provider auto-discovery |
@@ -52,8 +52,7 @@ Tie-break: `sec` > `bug` > `compat` > `feature` > `ux`.
    composer update --no-progress
    composer validate --strict
    composer audit --abandoned=report ; composer outdated --direct
-   composer quality          # php-cs-fixer, phpstan, rector --dry-run, phpunit
-   vendor/bin/phpstan analyse --memory-limit=1G --level=max --no-progress   # stricter than the configured level
+   composer quality          # php-cs-fixer, phpstan (level max), rector --dry-run, phpunit
    gitleaks detect --no-banner -s .
    actionlint
    ```

@@ -7,6 +7,7 @@ namespace Indy2kro\ValidateModels\Tests;
 use Does\Not\Exist;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Indy2kro\ValidateModels\Services\RelationChecker;
 
@@ -16,8 +17,8 @@ class RelationCheckerTest extends TestCase
     {
         parent::setUp();
 
-        Schema::create('parents', fn ($t) => $t->increments('id'));
-        Schema::create('children', function ($t) {
+        Schema::create('parents', fn (Blueprint $t) => $t->increments('id'));
+        Schema::create('children', function (Blueprint $t) {
             $t->increments('id');
             $t->unsignedInteger('parent_id')->nullable();
         });

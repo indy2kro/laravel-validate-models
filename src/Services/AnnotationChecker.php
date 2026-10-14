@@ -4,23 +4,41 @@ declare(strict_types=1);
 
 namespace Indy2kro\ValidateModels\Services;
 
-use Carbon\Carbon;
-use Doctrine\DBAL\Connection;
+use ArrayObject;
+use DateTimeInterface;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Collection;
 use Indy2kro\ValidateModels\Dto\ValidationIssue;
 use Indy2kro\ValidateModels\Dto\ValidationReport;
 use Indy2kro\ValidateModels\Support\DocblockPropertyParser;
+use Indy2kro\ValidateModels\Support\IgnoreList;
+use Indy2kro\ValidateModels\Support\SchemaInspector;
 use Indy2kro\ValidateModels\Support\TypeMatcher;
 use ReflectionClass;
+use stdClass;
 use Throwable;
 
 final class AnnotationChecker
 {
+    /** Token for doc types that cannot be checked against the database (mixed, object, unknown names). */
+    private const ANY = '*';
+
+    private const INTEGER_DOC_TYPES = ['int', 'integer', 'positive-int', 'negative-int', 'non-positive-int', 'non-negative-int', 'non-zero-int'];
+
+    private const STRING_DOC_TYPES = [
+        'string', 'non-empty-string', 'numeric-string', 'class-string', 'literal-string', 'lowercase-string',
+        'uppercase-string', 'non-falsy-string', 'truthy-string', 'callable-string', 'trait-string', 'interface-string',
+    ];
+
+    private const ARRAY_DOC_TYPES = ['array', 'list', 'non-empty-array', 'non-empty-list', 'iterable'];
+
+    private const DATE_CLASS_NAMES = ['carbon', 'carbonimmutable', 'carboninterface', 'datetime', 'datetimeimmutable', 'datetimeinterface'];
+
+    private readonly SchemaInspector $schema;
+
     /**
-     * @param array<string, string>       $ignore  property names to skip
-     * @param array<string, class-string> $aliases DocBlock short type => FQCN
+     * @param list<string>          $ignore  property names to skip (or "Model\Class::property")
+     * @param array<string, string> $aliases DocBlock short type => FQCN
      */
     public function __construct(
         private readonly TypeMatcher $matcher,
@@ -29,129 +47,91 @@ final class AnnotationChecker
         private readonly bool $checkCasts = true,
         private readonly array $ignore = [],
         private readonly array $aliases = [],
-        private readonly bool $checkNullability = true
+        private readonly bool $checkNullability = true,
+        ?SchemaInspector $schema = null,
     ) {
+        $this->schema = $schema ?? new SchemaInspector();
     }
 
     public function check(Model $model): ValidationReport
     {
         $report = new ValidationReport();
+        $class  = $model::class;
 
-        $ref   = new ReflectionClass($model);
-        $doc   = $ref->getDocComment() ?: null;
-        $props = $this->parser->parse($doc);
-        if (!$props) {
+        $doc   = (new ReflectionClass($model))->getDocComment();
+        $props = $this->parser->parse($doc === false ? null : $doc);
+        if ($props === []) {
+            return $report;
+        }
+
+        try {
+            $columns = $this->schema->columns($model);
+        } catch (Throwable) {
+            return $report; // ColumnCastChecker reports the failure
+        }
+        if ($columns === null) {
             return $report;
         }
 
         $table = $model->getTable();
-        if (!Schema::hasTable($table)) {
-            return $report;
-        }
-
-        $columns = Schema::getColumnListing($table);
-        $casts   = $model->getCasts();
+        $casts = $model->getCasts();
 
         foreach ($props as $name => $info) {
-            if (\in_array($name, $this->ignore, true)) {
+            if (IgnoreList::has($this->ignore, $class, $name)) {
                 continue;
             }
-            if ($this->columnsOnly && !\in_array($name, $columns, true)) {
-                continue;
-            }
-
-            // DB type
-            try {
-                $dbType = DB::getSchemaBuilder()->getColumnType($table, $name);
-            } catch (Throwable) {
-                $report = $report->with(new ValidationIssue(
-                    $model::class,
-                    'annotation',
-                    \sprintf("@property \$%s type '%s' cannot be checked: unknown DB type.", $name, $info['raw'])
-                ));
+            if (!isset($columns[$name])) {
+                if (!$this->columnsOnly) {
+                    $report = $report->with(new ValidationIssue(
+                        $class,
+                        'annotation',
+                        \sprintf("@property \$%s type '%s' cannot be checked: unknown DB type.", $name, $info['raw'])
+                    ));
+                }
                 continue;
             }
 
-            // DB nullability
+            $dbType = $columns[$name]['type'];
+
             if ($this->checkNullability) {
-                $isNullable = $this->resolveColumnNullability($table, $name);
-                if ($isNullable !== null) {
-                    if ($info['nullable'] && $isNullable === false) {
-                        $report = $report->with(new ValidationIssue(
-                            $model::class,
-                            'annotation',
-                            \sprintf("@property \$%s allows null but column '%s.%s' is NOT NULL", $name, $table, $name)
-                        ));
-                    }
-                    if (!$info['nullable'] && $isNullable === true) {
-                        $report = $report->with(new ValidationIssue(
-                            $model::class,
-                            'annotation',
-                            \sprintf("@property \$%s does not allow null but column '%s.%s' is NULLABLE", $name, $table, $name)
-                        ));
-                    }
+                $isNullable  = $columns[$name]['nullable'];
+                $docNullable = $info['nullable'] || $this->acceptsNull($info['types']);
+                if ($docNullable && !$isNullable) {
+                    $report = $report->with(new ValidationIssue(
+                        $class,
+                        'annotation',
+                        \sprintf("@property \$%s allows null but column '%s.%s' is NOT NULL", $name, $table, $name)
+                    ));
+                }
+                if (!$docNullable && $isNullable) {
+                    $report = $report->with(new ValidationIssue(
+                        $class,
+                        'annotation',
+                        \sprintf("@property \$%s does not allow null but column '%s.%s' is NULLABLE", $name, $table, $name)
+                    ));
                 }
             }
 
-            // DB type compatibility
-            $dbOk = false;
-            foreach ($info['types'] as $type) {
-                $resolved = $this->resolveAlias($type);
-                $mapped   = $this->mapDocTypeToCastToken($resolved);
+            $cast       = $casts[$name] ?? null;
+            $customCast = $cast !== null && $this->matcher->isCustomCast($cast);
 
-                if ($mapped !== null) {
-                    if ($this->matcher->isCompatible((string) $dbType, $mapped)) {
-                        $dbOk = true;
-                        break;
-                    }
-                } else {
-                    $class = ltrim($resolved, '\\');
-                    if (enum_exists($class) && $this->matcher->isCompatible((string) $dbType, $class)) {
-                        $dbOk = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!$dbOk) {
+            // DB type compatibility. A custom cast defines its own value type, so there is nothing to compare.
+            if (!$customCast && $info['types'] !== [] && !$this->matchesDbType($info['types'], $dbType)) {
                 $report = $report->with(new ValidationIssue(
-                    $model::class,
+                    $class,
                     'annotation',
-                    \sprintf("@property \$%s '%s' not compatible with DB type '%s'", $name, $info['raw'], (string) $dbType)
+                    \sprintf("@property \$%s '%s' not compatible with DB type '%s'", $name, $info['raw'], $dbType)
                 ));
             }
 
             // Cast consistency
-            if ($this->checkCasts && isset($casts[$name])) {
-                $castToken = $casts[$name];
-                $castOk    = false;
-
-                foreach ($info['types'] as $type) {
-                    $resolved = $this->resolveAlias($type);
-
-                    $castClass = ltrim($castToken, '\\');
-
-                    // Enum class ↔ cast FQCN
-                    if (enum_exists($castClass) && strcasecmp($castClass, ltrim($resolved, '\\')) === 0) {
-                        $castOk = true;
-                        break;
-                    }
-
-                    // Scalar/datetime-ish tokens
-                    $docToken = $this->mapDocTypeToCastToken($resolved);
-                    if ($docToken !== null && $this->castTokensSimilar($docToken, $castClass)) {
-                        $castOk = true;
-                        break;
-                    }
-                }
-
-                if (!$castOk) {
-                    $report = $report->with(new ValidationIssue(
-                        $model::class,
-                        'annotation',
-                        \sprintf("@property \$%s '%s' seems inconsistent with cast '%s'", $name, $info['raw'], (string) $castToken)
-                    ));
-                }
+            if ($this->checkCasts && $cast !== null && !$customCast && $info['types'] !== []
+                                  && !$this->matchesCast($info['types'], $cast)) {
+                $report = $report->with(new ValidationIssue(
+                    $class,
+                    'annotation',
+                    \sprintf("@property \$%s '%s' seems inconsistent with cast '%s'", $name, $info['raw'], $cast)
+                ));
             }
         }
 
@@ -159,192 +139,156 @@ final class AnnotationChecker
     }
 
     /**
-     * Resolve DocBlock type through configured aliases; returns a class-ish or scalar-ish token.
+     * `mixed` includes null, so it cannot contradict the column's nullability.
+     *
+     * @param list<string> $types
+     */
+    private function acceptsNull(array $types): bool
+    {
+        foreach ($types as $type) {
+            if (strtolower(ltrim($type, '\\')) === 'mixed') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param list<string> $types
+     */
+    private function matchesDbType(array $types, string $dbType): bool
+    {
+        foreach ($types as $type) {
+            $resolved = $this->resolveAlias($type);
+            $mapped   = $this->mapDocTypeToCastToken($resolved);
+
+            if ($mapped === self::ANY) {
+                return true;
+            }
+            if ($mapped !== null) {
+                if ($this->matcher->isCompatible($dbType, $mapped)) {
+                    return true;
+                }
+                continue;
+            }
+
+            $class = ltrim($resolved, '\\');
+            if (enum_exists($class) && $this->matcher->isCompatible($dbType, $class)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param list<string> $types
+     */
+    private function matchesCast(array $types, string $cast): bool
+    {
+        $castClass = ltrim($cast, '\\');
+
+        foreach ($types as $type) {
+            $resolved = $this->resolveAlias($type);
+            $mapped   = $this->mapDocTypeToCastToken($resolved);
+
+            if ($mapped === self::ANY) {
+                return true;
+            }
+            // Enum class <-> cast FQCN
+            if (enum_exists($castClass) && strcasecmp($castClass, ltrim($resolved, '\\')) === 0) {
+                return true;
+            }
+            if ($mapped !== null && $this->castTokensSimilar($mapped, $castClass)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Strip generics and array suffixes, then resolve DocBlock short names through the configured aliases.
      */
     private function resolveAlias(string $type): string
     {
         $t = ltrim($type, '\\');
-        if (isset($this->aliases[$t])) {
-            return ltrim((string) $this->aliases[$t], '\\');
+
+        if (str_ends_with($t, '[]')) {
+            return 'array';
+        }
+        $generic = strpos($t, '<');
+        if ($generic !== false) {
+            $t = substr($t, 0, $generic);
         }
 
-        return $t;
+        return isset($this->aliases[$t]) ? ltrim($this->aliases[$t], '\\') : $t;
     }
 
     /**
-     * Determine nullability for a DB column.
-     * Returns: true (=NULL allowed), false (=NOT NULL), null (=unknown).
-     */
-    private function resolveColumnNullability(string $table, string $column): ?bool
-    {
-        // 1) Prefer Doctrine DBAL if the connection exposes it (and DBAL is installed)
-        $conn   = DB::connection();
-        $method = 'getDoctrineConnection';
-        if (class_exists(Connection::class) && method_exists($conn, $method)) {
-            try {
-                /** @var object $doctrine */
-                $doctrine = $conn->$method(); // dynamic call avoids static analysis error
-                $sm       = null;
-                if (method_exists($doctrine, 'createSchemaManager')) {
-                    $sm = $doctrine->createSchemaManager(); // DBAL 3
-                } elseif (method_exists($doctrine, 'getSchemaManager')) {
-                    $sm = $doctrine->getSchemaManager();   // DBAL 2
-                }
-                if ($sm && method_exists($sm, 'introspectTable')) {
-                    // @phpstan-ignore-next-line
-                    $tbl = $sm->introspectTable($table);
-                    if ($tbl->hasColumn($column)) {
-                        $col = $tbl->getColumn($column);
-
-                        return !$col->getNotnull();
-                    }
-                } elseif ($sm && method_exists($sm, 'listTableDetails')) {
-                    // @phpstan-ignore-next-line
-                    $tbl = $sm->listTableDetails($table);
-                    if ($tbl->hasColumn($column)) {
-                        $col = $tbl->getColumn($column);
-
-                        return !$col->getNotnull();
-                    }
-                }
-            } catch (Throwable) {
-                // fall through to driver-specific heuristics
-            }
-        }
-
-        // 2) Driver-specific fallbacks
-        $driver = (string) DB::connection()->getDriverName();
-
-        try {
-            if ($driver === 'sqlite') {
-                $rows = DB::select('PRAGMA table_info(' . $this->quoteSqliteIdent($table) . ')');
-                foreach ($rows as $r) {
-                    if (isset($r->name, $r->notnull) && (string) $r->name === $column) {
-                        return ((int) $r->notnull) === 0; // 0 => nullable, 1 => not null
-                    }
-                }
-
-                return null;
-            }
-
-            if ($driver === 'mysql' || $driver === 'mariadb') {
-                $schema = DB::getDatabaseName();
-                $row    = DB::selectOne(
-                    'SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1',
-                    [$schema, $table, $column]
-                );
-                if ($row && isset($row->IS_NULLABLE)) {
-                    return strtoupper((string) $row->IS_NULLABLE) === 'YES';
-                }
-
-                return null;
-            }
-
-            if ($driver === 'pgsql') {
-                $row = DB::selectOne(
-                    'SELECT is_nullable FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ? AND column_name = ? LIMIT 1',
-                    [$table, $column]
-                );
-                if ($row && isset($row->is_nullable)) {
-                    return strtoupper((string) $row->is_nullable) === 'YES';
-                }
-
-                return null;
-            }
-        } catch (Throwable) {
-            // ignore and report unknown
-        }
-
-        return null;
-    }
-
-    private function quoteSqliteIdent(string $ident): string
-    {
-        return '"' . str_replace('"', '""', $ident) . '"';
-    }
-
-    /**
-     * Map a DocBlock type to a "cast token" that TypeMatcher understands (or null for class/enum).
+     * Map a DocBlock type to a canonical token TypeMatcher understands, ANY when it cannot be checked,
+     * or null for a class/enum that has to be compared by name.
      */
     private function mapDocTypeToCastToken(string $type): ?string
     {
         $t     = ltrim($type, '\\');
         $lower = strtolower($t);
 
-        if ($lower === 'int' || $lower === 'integer') {
+        if (\in_array($lower, self::INTEGER_DOC_TYPES, true)) {
             return 'integer';
         }
-        if ($lower === 'string') {
+        if (\in_array($lower, self::STRING_DOC_TYPES, true)) {
             return 'string';
         }
-        if ($lower === 'bool' || $lower === 'boolean') {
+        if (\in_array($lower, ['bool', 'boolean', 'true', 'false'], true)) {
             return 'boolean';
         }
         if ($lower === 'float' || $lower === 'double') {
             return 'float';
         }
-        if ($lower === 'decimal') {
-            return 'decimal';
-        }
-        if ($lower === 'array') {
+        if (\in_array($lower, self::ARRAY_DOC_TYPES, true)) {
             return 'array';
         }
-        if ($lower === 'json') {
-            return 'json';
+
+        switch ($lower) {
+            case 'decimal':
+            case 'json':
+            case 'date':
+                return $lower;
+            case 'mixed':
+            case 'object':
+            case 'resource':
+                return self::ANY;
         }
 
-        if (\in_array($t, ['Carbon', Carbon::class, \Illuminate\Support\Carbon::class, 'DateTime', 'DateTimeInterface'], true)) {
+        $separator = strrpos($t, '\\');
+        $short     = strtolower($separator === false ? $t : substr($t, $separator + 1));
+        if (\in_array($short, self::DATE_CLASS_NAMES, true) || (class_exists($t) && is_a($t, DateTimeInterface::class, true))) {
             return 'datetime';
         }
-        if ($lower === 'date') {
-            return 'date';
+        if (class_exists($t) && (is_a($t, Collection::class, true) || is_a($t, ArrayObject::class, true) || $t === stdClass::class)) {
+            return 'json';
         }
-
         if (enum_exists($t) || class_exists($t)) {
             return null;
         }
 
-        return $lower;
+        // Unresolvable name (a DocBlock carries no import information): do not guess.
+        return self::ANY;
     }
 
-    /** Compare doc token vs cast token loosely (normalize keywords). */
+    /** Compare doc token vs cast token by family (date/datetime and json/array are interchangeable). */
     private function castTokensSimilar(string $docToken, string $castToken): bool
     {
-        $a = strtolower($docToken);
-        $b = strtolower(ltrim($castToken, '\\'));
-
-        $normalize = static function (string $x): string {
-            if (str_contains($x, 'int')) {
-                return 'integer';
-            }
-            if (str_contains($x, 'bool')) {
-                return 'boolean';
-            }
-            if (str_contains($x, 'string')) {
-                return 'string';
-            }
-            if (str_contains($x, 'float') || str_contains($x, 'double')) {
-                return 'float';
-            }
-            if (str_contains($x, 'decimal')) {
-                return 'decimal';
-            }
-            if (str_contains($x, 'datetime')) {
-                return 'datetime';
-            }
-            if (str_contains($x, 'date')) {
-                return 'date';
-            }
-            if (str_contains($x, 'json')) {
-                return 'json';
-            }
-            if (str_contains($x, 'array')) {
-                return 'array';
-            }
-
-            return $x;
+        $family = static fn (string $x): string => match ($x) {
+            'date', 'datetime' => 'datetime',
+            'json', 'array'    => 'json',
+            default            => $x,
         };
 
-        return $normalize($a) === $normalize($b);
+        $cast = TypeMatcher::canonicalCast($castToken) ?? strtolower(ltrim($castToken, '\\'));
+
+        return $family(strtolower($docToken)) === $family($cast);
     }
 }
