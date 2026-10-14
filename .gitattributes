@@ -1,5 +1,10 @@
+# Keep LF everywhere so php-cs-fixer passes on Windows checkouts too.
+* text=auto eol=lf
+
 /.github export-ignore
+/.claude export-ignore
 /tests export-ignore
+/CLAUDE.md export-ignore
 /.gitignore export-ignore
 /.gitattributes export-ignore
 /phpunit.xml export-ignore

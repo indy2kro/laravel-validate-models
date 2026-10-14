@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Indy2kro\ValidateModels\Tests;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Testing\PendingCommand;
@@ -15,7 +16,7 @@ class ValidateModelsCommandTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        Schema::create('ok_table', fn ($t) => $t->increments('id'));
+        Schema::create('ok_table', fn (Blueprint $t) => $t->increments('id'));
     }
 
     public function test_command_exits_zero_on_clean_run(): void

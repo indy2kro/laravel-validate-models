@@ -6,20 +6,34 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
   tests:
-    name: PHP ${{ matrix.php }} • deps=${{ matrix.deps }}
+    name: PHP ${{ matrix.php }} • Laravel ${{ matrix.laravel }}
     runs-on: ubuntu-latest
 
     strategy:
       fail-fast: false
       matrix:
         php: ['8.3', '8.4', '8.5']
-        deps: ['stable']
+        laravel: ['12', '13']
+        include:
+          - laravel: '12'
+            testbench: '^10.0'
+          - laravel: '13'
+            testbench: '^11.0'
+
+    env:
+      # Style and static analysis run against the newest Laravel only.
+      STATIC_CHECKS: ${{ matrix.laravel == '13' }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup PHP
         uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2.40.0
@@ -31,27 +45,39 @@ jobs:
 
       - name: Get Composer cache directory
         id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
 
+      # No composer.lock is committed, so cache only the download cache, keyed on composer.json.
       - name: Cache dependencies
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
-          key: ${{ runner.os }}-php-${{ matrix.php }}-deps-${{ matrix.deps }}-${{ hashFiles('**/composer.lock') }}
+          key: ${{ runner.os }}-php-${{ matrix.php }}-laravel-${{ matrix.laravel }}-${{ hashFiles('composer.json') }}
           restore-keys: |
-            ${{ runner.os }}-php-${{ matrix.php }}-deps-${{ matrix.deps }}-
+            ${{ runner.os }}-php-${{ matrix.php }}-laravel-${{ matrix.laravel }}-
+
+      - name: Validate composer.json
+        run: composer validate --strict
+
+      - name: Select Laravel ${{ matrix.laravel }}
+        run: composer require --dev --no-update "orchestra/testbench:${{ matrix.testbench }}"
 
       - name: Install dependencies
-        run: |
-          composer install --no-interaction --no-progress
+        run: composer update --no-interaction --no-progress --prefer-dist
+
+      - name: Audit dependencies
+        run: composer audit --abandoned=report
 
       - name: Lint (php-cs-fixer)
+        if: ${{ env.STATIC_CHECKS == 'true' }}
         run: composer cs
 
       - name: Static analysis (PHPStan)
+        if: ${{ env.STATIC_CHECKS == 'true' }}
         run: composer stan
 
       - name: Rector (dry-run)
+        if: ${{ env.STATIC_CHECKS == 'true' }}
         run: composer rector
 
       - name: PHPUnit
@@ -60,5 +86,32 @@ jobs:
       - name: Upload coverage artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: coverage-${{ matrix.php }}-${{ matrix.deps }}
+          name: coverage-php${{ matrix.php }}-laravel${{ matrix.laravel }}
           path: build/coverage
+
+  lowest:
+    # composer.json allows older majors; test the oldest allowed dependencies too.
+    name: Lowest dependencies (PHP 8.3)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2.40.0
+        with:
+          php-version: '8.3'
+          extensions: mbstring, pdo, pdo_sqlite
+          coverage: none
+          tools: composer:v2
+
+      - name: Install the lowest allowed dependencies
+        run: |
+          composer update --prefer-lowest --prefer-stable --no-interaction --no-progress --prefer-dist
+          composer show --direct
+
+      - name: PHPUnit
+        run: composer test

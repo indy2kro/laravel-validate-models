@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace Indy2kro\ValidateModels\Tests;
 
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Indy2kro\ValidateModels\Services\AnnotationChecker;
 use Indy2kro\ValidateModels\Support\DocblockPropertyParser;
 use Indy2kro\ValidateModels\Support\TypeMatcher;
-use Indy2kro\ValidateModels\Tests\_Tmp\Batch;
-use Indy2kro\ValidateModels\Tests\_Tmp\BatchBad;
+use Indy2kro\ValidateModels\Tests\Fixtures\Batch;
+use Indy2kro\ValidateModels\Tests\Fixtures\BatchBad;
 
 class AnnotationCheckerTest extends TestCase
 {
@@ -17,7 +18,7 @@ class AnnotationCheckerTest extends TestCase
     {
         parent::setUp();
 
-        Schema::create('batches', function ($t) {
+        Schema::create('batches', function (Blueprint $t) {
             $t->increments('id');
             $t->integer('year');
             $t->integer('month');

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Indy2kro\ValidateModels\Tests\_Tmp;
+namespace Indy2kro\ValidateModels\Tests\Fixtures;
 
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
