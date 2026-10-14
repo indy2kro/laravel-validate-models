@@ -129,21 +129,19 @@ final class AnnotationChecker
                 foreach ($info['types'] as $type) {
                     $resolved = $this->resolveAlias($type);
 
-                    if (\is_string($castToken)) {
-                        $castClass = ltrim((string) $castToken, '\\');
+                    $castClass = ltrim($castToken, '\\');
 
-                        // Enum class ↔ cast FQCN
-                        if (enum_exists($castClass) && strcasecmp($castClass, ltrim($resolved, '\\')) === 0) {
-                            $castOk = true;
-                            break;
-                        }
+                    // Enum class ↔ cast FQCN
+                    if (enum_exists($castClass) && strcasecmp($castClass, ltrim($resolved, '\\')) === 0) {
+                        $castOk = true;
+                        break;
+                    }
 
-                        // Scalar/datetime-ish tokens
-                        $docToken = $this->mapDocTypeToCastToken($resolved);
-                        if ($docToken !== null && $this->castTokensSimilar($docToken, $castClass)) {
-                            $castOk = true;
-                            break;
-                        }
+                    // Scalar/datetime-ish tokens
+                    $docToken = $this->mapDocTypeToCastToken($resolved);
+                    if ($docToken !== null && $this->castTokensSimilar($docToken, $castClass)) {
+                        $castOk = true;
+                        break;
                     }
                 }
 
