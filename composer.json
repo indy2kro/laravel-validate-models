@@ -62,11 +62,14 @@
     "stan": "phpstan analyse --ansi --memory-limit=1G",
     "rector": "rector process --dry-run",
     "rector:fix": "rector process",
-    "ci": [
+    "quality": [
       "@cs",
       "@stan",
       "@rector",
       "@test"
+    ],
+    "ci": [
+      "@quality"
     ]
   },
   "config": {
